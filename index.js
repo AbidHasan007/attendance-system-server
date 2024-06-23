@@ -10,7 +10,11 @@ const port = process.env.PORT || 8000
 
 // middleware
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  origin: [
+    //'http://localhost:5173', 
+   //'http://localhost:5174', 
+  'https://attendance-ms-16398.web.app',
+  'https://attendance-ms-16398.firebaseapp.com'],
   credentials: true,
   optionSuccessStatus: 200,
 }
@@ -51,6 +55,7 @@ async function run() {
     const courseCollection = client.db('attendanceSys').collection('courses')
     const studentCollection = client.db('attendanceSys').collection('students')
     const attendanceCollection = client.db('attendanceSys').collection('attendances')
+    
     // auth related api
     app.post('/jwt', async (req, res) => {
       const user = req.body
@@ -127,19 +132,34 @@ async function run() {
   } )
 
   //add attendance
-  app.post("/attendance", async(req, res)=>{
+  app.post("/attendance", async (req, res) => {
     try {
       const attendanceRecords = req.body;
       if (!Array.isArray(attendanceRecords)) {
         return res.status(400).json({ error: 'Data should be an array of attendance records' });
       }
-      const result = await attendanceCollection.insertMany(attendanceRecords);
+  
+      // Extract and format dates from the attendance records
+      const formattedRecords = attendanceRecords.map(record => {
+        const date = new Date(record.date).toLocaleDateString('en-CA'); // Use 'en-CA' for 'YYYY-MM-DD' format
+        return { ...record, date };
+      });
+  
+      // Check for duplicate dates
+      const dates = formattedRecords.map(record => record.date);
+      const existingRecords = await attendanceCollection.find({ date: { $in: dates } }).toArray();
+      if (existingRecords.length > 0) {
+        return res.status(400).json({ error: 'Duplicate dates found. Records for these dates already exist.' });
+      }
+  
+      // Insert new records if no duplicates are found
+      const result = await attendanceCollection.insertMany(formattedRecords);
       res.status(201).json(result.ops);
     } catch (err) {
       res.status(500).json({ error: 'Failed to add records' });
     }
+  });
   
-  })
 
     // get a user data using logged in user email
      app.get("/user/:email", async(req,res)=>{
